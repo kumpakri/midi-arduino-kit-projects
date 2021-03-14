@@ -22,19 +22,21 @@ const byte columns[] = {
 enum DisplayMode{
   standbyMode,
   textMode,  
+  shiftingTextMode,
 };
 
 // standbyMode setting
 static unsigned long timeLastLoop;
-static unsigned long timeLastFrameChange;
-static byte picIndex;
 // pulsingHeart:300/pulsingCircle:100
 const unsigned long frameDelay_ms = 100;
 // pulsingHeart:4/pulsingCircle:6
 const byte nFrames = 6;
 
+static unsigned long timeLastFrameChange;
+static byte picIndex;
+static byte shift;
 
-DisplayMode displayMode = textMode;
+DisplayMode displayMode = shiftingTextMode;
 
 
 void setup() {
@@ -50,17 +52,20 @@ void setup() {
   timeLastLoop = millis();
   timeLastFrameChange = millis();
   picIndex = 0;
+  shift = 0;
 }
 
 
 void loop() {
-
   switch(displayMode){
     case(standbyMode):
       drawStandyCircle();
       break;
     case(textMode):
-      drawText("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+      drawText("HELLO WORLD");
+      break;
+    case(shiftingTextMode):
+      drawShiftingText("HELLO WORLD ");
       break;
   };
 }
@@ -83,6 +88,29 @@ void getScreen(byte list[], byte index, byte screen[]){
   screen[7] = list[index*8 + 7];
 }
 
+/**
+ * @brief Retrieves one 8x8 sign from the list of many signs stacked together
+ *        vertically in one list. Shifts the next letter into the screen
+ *        based on the `shift` number of bits.
+ * @param[in] list      list of 8x8 signs vertically stacked in one array
+ * @param[in] index1     index of the first sign to be retrieved from the list
+ * @param[in] index1     index of the second sign to be retrieved from the list
+ * @param[in] shift     number of bits by which to shift the first letter
+ * @param{out} screen   reference to output byte array
+ */
+void getShiftingScreen(byte list[], byte index1, byte index2, byte shift, byte screen[8]){
+  byte masks[] = {0, 128, 192, 224, 240, 248, 252, 254};
+  
+  screen[0] = (list[index1*8] << shift) | ((list[index2*8] & masks[shift]) >> (8 - shift));
+  screen[1] = (list[index1*8 + 1] << shift) | ((list[index2*8 + 1] & masks[shift]) >> (8 - shift));
+  screen[2] = (list[index1*8 + 2] << shift) | ((list[index2*8 + 2] & masks[shift]) >> (8 - shift));
+  screen[3] = (list[index1*8 + 3] << shift) | ((list[index2*8 + 3] & masks[shift]) >> (8 - shift));
+  screen[4] = (list[index1*8 + 4] << shift) | ((list[index2*8 + 4] & masks[shift]) >> (8 - shift));
+  screen[5] = (list[index1*8 + 5] << shift) | ((list[index2*8 + 5] & masks[shift]) >> (8 - shift));
+  screen[6] = (list[index1*8 + 6] << shift) | ((list[index2*8 + 6] & masks[shift]) >> (8 - shift));
+  screen[7] = (list[index1*8 + 7] << shift) | ((list[index2*8 + 7] & masks[shift]) >> (8 - shift));
+}
+
 void drawText(char text[]){
   if(text[picIndex] != '\0'){
     delay(2);
@@ -103,6 +131,37 @@ void drawText(char text[]){
     displayMode = standbyMode;
   }
     
+}
+
+void drawShiftingText(char text[]){
+  if(text[picIndex+1] != '\0'){
+    delay(2);
+    byte index1 = text[picIndex]-64;
+    if(text[picIndex] == ' '){
+      index1 = 0;
+    }
+
+    byte index2 = text[picIndex+1]-64;
+    if(text[picIndex+1] == ' '){
+      index2 = 0;
+    }
+    
+    byte currScreen[8];
+    getShiftingScreen(alphabet, index1, index2, shift, currScreen);
+
+    drawScreen(currScreen);
+    if(millis() - timeLastFrameChange > 200){
+      timeLastFrameChange = millis();
+      shift++;
+    }
+    if(shift > 7){
+      shift = 0;
+      picIndex++;
+    }
+  } else {
+    picIndex = 0;
+    displayMode = standbyMode;
+  }
 }
 
 void drawStandyCircle(){
@@ -136,6 +195,6 @@ void drawScreen(byte buffer[]){
 
 void setColumns(byte b){
   for(byte i = 0; i < 8; i++){
-    digitalWrite(columns[i], (b >> i) & 0x001);
+    digitalWrite(columns[i], ((b << i) & B10000000) > 0);
   }
 }
